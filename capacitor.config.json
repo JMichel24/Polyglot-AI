@@ -1,0 +1,9 @@
+{
+  "appId": "com.aitutorspeak.app",
+  "appName": "AI_TutorSpeak",
+  "webDir": "dist",
+  "server": {
+    "cleartext": true,
+    "androidScheme": "http"
+  }
+}
