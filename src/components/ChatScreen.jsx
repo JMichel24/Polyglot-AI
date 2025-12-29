@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle } from 'lucide-react';
+import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle, Gamepad2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { sendMessageToGemini, getChatHistory } from '../services/geminiService';
 import { startListening, stopListening, playAudio } from '../services/audioService';
@@ -7,6 +7,9 @@ import SettingsModal from './SettingsModal';
 import KoreanKeyboard from './KoreanKeyboard';
 import JapaneseKeyboard from './JapaneseKeyboard';
 import { composeHangul, deleteHangul } from '../services/hangulService';
+import { GameContainer } from './games';
+import { getExercisesForLesson } from '../data/exercises';
+import { saveGameScore, saveLessonGrade } from '../services/gameService';
 
 export default function ChatScreen({ language, level, avatar, onBack, onUpdateSettings, lessonContext, nativeLanguage, username, chatMode = 'lesson' }) {
     const [messages, setMessages] = useState([]);
@@ -17,6 +20,8 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
     const [apiKey, setApiKey] = useState('');
     const [isHandsFree, setIsHandsFree] = useState(false);
     const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+    const [isGameOpen, setIsGameOpen] = useState(false);
+    const [currentExercises, setCurrentExercises] = useState([]);
 
     const [inputSource, setInputSource] = useState('text');
 
@@ -169,6 +174,17 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
             };
 
             setMessages(prev => [...prev, aiMessage]);
+
+            // Show grade notification if AI gave a grade
+            if (response.lessonGrade && response.lessonGrade > 0) {
+                const gradeEmoji = response.lessonGrade >= 90 ? '🌟' : response.lessonGrade >= 75 ? '✨' : response.lessonGrade >= 60 ? '📚' : '💪';
+                setMessages(prev => [...prev, {
+                    id: uuidv4(),
+                    role: 'system',
+                    content: `${gradeEmoji} ¡Calificación de la lección: ${response.lessonGrade}%! ${response.lessonGrade >= 75 ? '¡Excelente trabajo!' : 'Sigue practicando para mejorar.'}`,
+                    correction: null
+                }]);
+            }
 
             // Play Audio with Animation
             await playAudio(
@@ -375,12 +391,27 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 hover:bg-slate-700 rounded-full text-slate-300 transition-colors"
-                >
-                    <Settings size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                    {chatMode === 'lesson' && lessonContext && (
+                        <button
+                            onClick={() => {
+                                const exercises = getExercisesForLesson(lessonContext.id, lessonContext.topic);
+                                setCurrentExercises(exercises);
+                                setIsGameOpen(true);
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full text-sm font-bold hover:from-purple-500 hover:to-pink-500 transition-all shadow-lg shadow-purple-900/30"
+                        >
+                            <Gamepad2 size={18} />
+                            <span className="hidden md:inline">Practice</span>
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="p-2 hover:bg-slate-700 rounded-full text-slate-300 transition-colors"
+                    >
+                        <Settings size={20} />
+                    </button>
+                </div>
             </div>
 
             {/* Messages */}
@@ -549,6 +580,43 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
                 <div className="bg-slate-800 border-t border-slate-700 animate-slide-up">
                     <JapaneseKeyboard onInput={handleJapaneseInput} onDelete={handleJapaneseDelete} />
                 </div>
+            )}
+
+            {/* Settings Modal */}
+            {/* Game Modal */}
+            {isGameOpen && currentExercises.length > 0 && (
+                <GameContainer
+                    exercises={currentExercises}
+                    language={language}
+                    onClose={() => setIsGameOpen(false)}
+                    onComplete={async (score) => {
+                        setIsGameOpen(false);
+
+                        // Save score to backend
+                        const token = localStorage.getItem('token');
+                        const totalAnswers = score.correct + (score.incorrect || 0);
+                        const percentage = totalAnswers > 0 ? Math.round((score.correct / totalAnswers) * 100) : 0;
+
+                        if (token && lessonContext?.id && totalAnswers > 0) {
+                            try {
+                                // Save to game_scores
+                                await saveGameScore(token, lessonContext.id, 'practice', score.correct, totalAnswers);
+
+                                // Also save to lesson_grades (updates combined grade)
+                                await saveLessonGrade(token, lessonContext.id, lessonContext.module || 'General', null, percentage);
+                            } catch (error) {
+                                console.error('Error saving game score:', error);
+                            }
+                        }
+
+                        setMessages(prev => [...prev, {
+                            id: uuidv4(),
+                            role: 'system',
+                            content: `🎮 ¡Práctica completada! Puntuación: ${score.correct}/${totalAnswers} (${percentage}%)`,
+                            correction: null
+                        }]);
+                    }}
+                />
             )}
 
             {/* Settings Modal */}

@@ -42,6 +42,48 @@ async function initializeDatabase() {
             FOREIGN KEY(user_id) REFERENCES users(id),
             UNIQUE(user_id, lesson_id)
         );
+
+        CREATE TABLE IF NOT EXISTS game_scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            lesson_id TEXT,
+            game_type TEXT,
+            score_correct INTEGER,
+            score_total INTEGER,
+            percentage INTEGER,
+            completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS level_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            language TEXT,
+            level TEXT,
+            total_games_played INTEGER DEFAULT 0,
+            average_percentage INTEGER DEFAULT 0,
+            can_take_exam INTEGER DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, language, level)
+        );
+
+        CREATE TABLE IF NOT EXISTS lesson_grades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            lesson_id TEXT,
+            module_name TEXT,
+            ai_grade INTEGER DEFAULT 0,
+            game_grade INTEGER DEFAULT 0,
+            combined_grade INTEGER DEFAULT 0,
+            completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            UNIQUE(user_id, lesson_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_game_scores_user_lesson ON game_scores(user_id, lesson_id);
+        CREATE INDEX IF NOT EXISTS idx_level_progress_user ON level_progress(user_id, language, level);
+        CREATE INDEX IF NOT EXISTS idx_lesson_grades_user ON lesson_grades(user_id, lesson_id);
     `);
 
     // Migration: Add new user columns if they don't exist

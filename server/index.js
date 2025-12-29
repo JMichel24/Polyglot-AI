@@ -241,6 +241,307 @@ app.post('/lessons/complete', authenticateToken, async (req, res) => {
     }
 });
 
+// --- GAME SCORE ROUTES ---
+
+// Save game score
+app.post('/games/score', authenticateToken, async (req, res) => {
+    const { lessonId, gameType, correct, total } = req.body;
+    const userId = req.user.id;
+    const percentage = Math.round((correct / total) * 100);
+
+    try {
+        const db = await initializeDatabase();
+
+        // Save the game score
+        await db.run(
+            `INSERT INTO game_scores (user_id, lesson_id, game_type, score_correct, score_total, percentage) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [userId, lessonId, gameType, correct, total, percentage]
+        );
+
+        // Extract language and level from lessonId (e.g., 'eng-a1-5' -> 'English', 'A1')
+        const parts = lessonId.split('-');
+        if (parts.length >= 2) {
+            const langCode = parts[0];
+            const levelCode = parts[1].toUpperCase();
+
+            // Map language codes to full names
+            const langMap = {
+                'eng': 'English', 'spa': 'Spanish', 'fra': 'French',
+                'deu': 'German', 'ita': 'Italian', 'jpn': 'Japanese', 'kor': 'Korean'
+            };
+            const language = langMap[langCode] || langCode;
+
+            // Calculate average percentage for this level
+            const stats = await db.get(
+                `SELECT COUNT(*) as total_games, AVG(percentage) as avg_percentage 
+                 FROM game_scores 
+                 WHERE user_id = ? AND lesson_id LIKE ?`,
+                [userId, `${langCode}-${parts[1]}-%`]
+            );
+
+            const avgPercentage = Math.round(stats.avg_percentage || 0);
+            const canTakeExam = avgPercentage >= 75 ? 1 : 0;
+
+            // Update level progress
+            await db.run(
+                `INSERT INTO level_progress (user_id, language, level, total_games_played, average_percentage, can_take_exam) 
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(user_id, language, level) 
+                 DO UPDATE SET total_games_played = ?, average_percentage = ?, can_take_exam = ?, updated_at = CURRENT_TIMESTAMP`,
+                [userId, language, levelCode, stats.total_games, avgPercentage, canTakeExam,
+                    stats.total_games, avgPercentage, canTakeExam]
+            );
+        }
+
+        res.json({ success: true, percentage });
+    } catch (error) {
+        console.error("Error saving game score:", error);
+        res.status(500).json({ error: "Error saving game score" });
+    }
+});
+
+// Get level progress (for exam blocking)
+app.get('/games/progress/:language/:level', authenticateToken, async (req, res) => {
+    const { language, level } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const db = await initializeDatabase();
+
+        // Get level progress
+        const progress = await db.get(
+            `SELECT * FROM level_progress WHERE user_id = ? AND language = ? AND level = ?`,
+            [userId, language, level.toUpperCase()]
+        );
+
+        if (!progress) {
+            return res.json({
+                totalGamesPlayed: 0,
+                averagePercentage: 0,
+                canTakeExam: false,
+                lessonsToRepeat: []
+            });
+        }
+
+        // Find lessons with low scores (< 70%)
+        const langCodeMap = {
+            'English': 'eng', 'Spanish': 'spa', 'French': 'fra',
+            'German': 'deu', 'Italian': 'ita', 'Japanese': 'jpn', 'Korean': 'kor'
+        };
+        const langCode = langCodeMap[language] || language.substring(0, 3).toLowerCase();
+
+        const lowScoreLessons = await db.all(
+            `SELECT lesson_id, AVG(percentage) as avg_score 
+             FROM game_scores 
+             WHERE user_id = ? AND lesson_id LIKE ? 
+             GROUP BY lesson_id 
+             HAVING avg_score < 70
+             ORDER BY avg_score ASC`,
+            [userId, `${langCode}-${level.toLowerCase()}-%`]
+        );
+
+        res.json({
+            totalGamesPlayed: progress.total_games_played,
+            averagePercentage: progress.average_percentage,
+            canTakeExam: progress.can_take_exam === 1,
+            lessonsToRepeat: lowScoreLessons.map(l => ({
+                lessonId: l.lesson_id,
+                score: Math.round(l.avg_score)
+            }))
+        });
+    } catch (error) {
+        console.error("Error getting level progress:", error);
+        res.status(500).json({ error: "Error getting level progress" });
+    }
+});
+
+// Get scores for a specific lesson
+app.get('/games/lesson-scores/:lessonId', authenticateToken, async (req, res) => {
+    const { lessonId } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const db = await initializeDatabase();
+        const scores = await db.all(
+            `SELECT game_type, score_correct, score_total, percentage, completed_at 
+             FROM game_scores 
+             WHERE user_id = ? AND lesson_id = ? 
+             ORDER BY completed_at DESC 
+             LIMIT 10`,
+            [userId, lessonId]
+        );
+
+        res.json(scores);
+    } catch (error) {
+        console.error("Error getting lesson scores:", error);
+        res.status(500).json({ error: "Error getting lesson scores" });
+    }
+});
+
+// --- GRADE ROUTES ---
+
+// Save lesson grade (from AI or combined)
+app.post('/grades/lesson', authenticateToken, async (req, res) => {
+    const { lessonId, moduleName, aiGrade, gameGrade } = req.body;
+    const userId = req.user.id;
+
+    // Calculate combined grade (average of AI and game if both exist)
+    let combinedGrade = 0;
+    if (aiGrade && gameGrade) {
+        combinedGrade = Math.round((aiGrade + gameGrade) / 2);
+    } else if (aiGrade) {
+        combinedGrade = aiGrade;
+    } else if (gameGrade) {
+        combinedGrade = gameGrade;
+    }
+
+    try {
+        const db = await initializeDatabase();
+
+        // Insert or update the lesson grade
+        await db.run(
+            `INSERT INTO lesson_grades (user_id, lesson_id, module_name, ai_grade, game_grade, combined_grade)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id, lesson_id) DO UPDATE SET 
+                ai_grade = CASE WHEN ? > 0 THEN ? ELSE ai_grade END,
+                game_grade = CASE WHEN ? > 0 THEN ? ELSE game_grade END,
+                combined_grade = CASE 
+                    WHEN ? > 0 AND game_grade > 0 THEN ROUND((? + game_grade) / 2)
+                    WHEN ai_grade > 0 AND ? > 0 THEN ROUND((ai_grade + ?) / 2)
+                    WHEN ? > 0 THEN ?
+                    WHEN ? > 0 THEN ?
+                    ELSE combined_grade
+                END,
+                completed_at = CURRENT_TIMESTAMP`,
+            [userId, lessonId, moduleName, aiGrade || 0, gameGrade || 0, combinedGrade,
+                aiGrade || 0, aiGrade || 0,
+                gameGrade || 0, gameGrade || 0,
+                aiGrade || 0, aiGrade || 0,
+                gameGrade || 0, gameGrade || 0,
+                aiGrade || 0, aiGrade || 0,
+                gameGrade || 0, gameGrade || 0]
+        );
+
+        // Update level progress
+        await updateLevelProgress(db, userId, lessonId);
+
+        res.json({ success: true, combinedGrade });
+    } catch (error) {
+        console.error("Error saving lesson grade:", error);
+        res.status(500).json({ error: "Error saving lesson grade" });
+    }
+});
+
+// Get grade summary for a language/level
+app.get('/grades/summary/:language/:level', authenticateToken, async (req, res) => {
+    const { language, level } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const db = await initializeDatabase();
+
+        // Map language code
+        const langCodeMap = {
+            'English': 'eng', 'Spanish': 'spa', 'French': 'fra',
+            'German': 'deu', 'Italian': 'ita', 'Japanese': 'jpn', 'Korean': 'kor'
+        };
+        const langCode = langCodeMap[language] || language.substring(0, 3).toLowerCase();
+        const lessonPattern = `${langCode}-${level.toLowerCase()}-%`;
+
+        // Get all lesson grades for this level
+        const grades = await db.all(
+            `SELECT lesson_id, module_name, ai_grade, game_grade, combined_grade, completed_at 
+             FROM lesson_grades 
+             WHERE user_id = ? AND lesson_id LIKE ?
+             ORDER BY lesson_id`,
+            [userId, lessonPattern]
+        );
+
+        // Group by module and calculate averages
+        const moduleGrades = {};
+        for (const grade of grades) {
+            const moduleName = grade.module_name || 'General';
+            if (!moduleGrades[moduleName]) {
+                moduleGrades[moduleName] = {
+                    lessons: [],
+                    average: 0
+                };
+            }
+            moduleGrades[moduleName].lessons.push({
+                lessonId: grade.lesson_id,
+                aiGrade: grade.ai_grade,
+                gameGrade: grade.game_grade,
+                combinedGrade: grade.combined_grade
+            });
+        }
+
+        // Calculate module averages
+        let totalSum = 0;
+        let totalCount = 0;
+        for (const moduleName in moduleGrades) {
+            const module = moduleGrades[moduleName];
+            const validGrades = module.lessons.filter(l => l.combinedGrade > 0);
+            if (validGrades.length > 0) {
+                module.average = Math.round(
+                    validGrades.reduce((sum, l) => sum + l.combinedGrade, 0) / validGrades.length
+                );
+                totalSum += module.average;
+                totalCount++;
+            }
+        }
+
+        const overallAverage = totalCount > 0 ? Math.round(totalSum / totalCount) : 0;
+        const canTakeExam = overallAverage >= 75;
+
+        res.json({
+            moduleGrades,
+            overallAverage,
+            canTakeExam,
+            totalLessonsGraded: grades.length
+        });
+    } catch (error) {
+        console.error("Error getting grade summary:", error);
+        res.status(500).json({ error: "Error getting grade summary" });
+    }
+});
+
+// Helper function to update level progress
+async function updateLevelProgress(db, userId, lessonId) {
+    const parts = lessonId.split('-');
+    if (parts.length < 2) return;
+
+    const langCode = parts[0];
+    const levelCode = parts[1].toUpperCase();
+    const lessonPattern = `${langCode}-${parts[1]}-%`;
+
+    // Map language codes to full names
+    const langMap = {
+        'eng': 'English', 'spa': 'Spanish', 'fra': 'French',
+        'deu': 'German', 'ita': 'Italian', 'jpn': 'Japanese', 'kor': 'Korean'
+    };
+    const language = langMap[langCode] || langCode;
+
+    // Calculate overall average from lesson grades
+    const stats = await db.get(
+        `SELECT AVG(combined_grade) as avg_grade, COUNT(*) as total 
+         FROM lesson_grades 
+         WHERE user_id = ? AND lesson_id LIKE ? AND combined_grade > 0`,
+        [userId, lessonPattern]
+    );
+
+    const avgPercentage = Math.round(stats.avg_grade || 0);
+    const canTakeExam = avgPercentage >= 75 ? 1 : 0;
+
+    await db.run(
+        `INSERT INTO level_progress (user_id, language, level, average_percentage, can_take_exam)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, language, level) DO UPDATE SET 
+            average_percentage = ?, can_take_exam = ?, updated_at = CURRENT_TIMESTAMP`,
+        [userId, language, levelCode, avgPercentage, canTakeExam, avgPercentage, canTakeExam]
+    );
+}
+
 // --- CHAT ROUTES ---
 
 app.get('/chat/history', authenticateToken, async (req, res) => {
@@ -403,6 +704,26 @@ app.post('/chat/message', authenticateToken, upload.single('audio'), async (req,
                     - **Ignore Chit-Chat**: If the user says "Hello", say "Hello. Let's begin." and start Step 1 immediately.
                     - **Be Specific**: Always tell the user exactly what to say or write.
 
+                    **GAMES & PRACTICE**:
+                    - After teaching 3-4 vocabulary items OR when the user has completed several exercises successfully, suggest they practice with games.
+                    - Say something like: "¡Excelente progreso! 🎮 ¿Por qué no pruebas los juegos de práctica para reforzar lo aprendido? Haz clic en el botón 'Practice' arriba."
+                    - At the END of a lesson section (when you've covered multiple concepts), always encourage practicing with games before moving on.
+                    - If the user asks about games or practice, tell them to click the 🎮 Practice button in the header.
+
+                    **GRADING SYSTEM (VERY IMPORTANT)**:
+                    - Keep track of the student's performance throughout the lesson.
+                    - Evaluate based on: pronunciation accuracy, writing correctness, comprehension, and active participation.
+                    - When the user says "goodbye", "exit", "finish", "done", "terminar", "salir", or similar words indicating they want to end the lesson, you MUST provide a FINAL GRADE.
+                    - Also provide a grade after teaching 5-6 concepts successfully.
+                    - Format the grade EXACTLY like this: "$$LESSON_GRADE: XX$$" (where XX is 0-100).
+                    - Grading scale:
+                      * 90-100: Excellent - Few or no errors, active participation, great pronunciation
+                      * 75-89: Good - Some minor errors but solid understanding demonstrated
+                      * 60-74: Needs Practice - Multiple errors, should repeat some exercises
+                      * Below 60: Repeat Lesson - Significant difficulty, encourage more practice
+                    - Be fair but encouraging. Always explain WHY you gave the grade.
+                    - Example: "Great work today, ${studentName}! You showed excellent understanding of greetings. $$LESSON_GRADE: 85$$"
+
                     Format:
                     - Use "$$CORRECTION$$:" for corrections.
                     
@@ -497,6 +818,41 @@ app.post('/chat/message', authenticateToken, upload.single('audio'), async (req,
             const parts = responseText.split('$$CORRECTION$$:');
             content = parts[0].trim();
             correction = parts.length > 1 ? parts[1].trim() : null;
+
+            // Parse Lesson Grade (if present)
+            const lessonGradeMatch = content.match(/\$\$LESSON_GRADE:\s*(\d+)\$\$/);
+            if (lessonGradeMatch && lessonContext) {
+                const aiGrade = parseInt(lessonGradeMatch[1]);
+                console.log(`[Grade] AI gave grade: ${aiGrade} for lesson ${lessonContext.id}`);
+
+                // Save the AI grade to lesson_grades table
+                try {
+                    await db.run(
+                        `INSERT INTO lesson_grades (user_id, lesson_id, module_name, ai_grade, combined_grade)
+                         VALUES (?, ?, ?, ?, ?)
+                         ON CONFLICT(user_id, lesson_id) DO UPDATE SET 
+                            ai_grade = ?,
+                            combined_grade = CASE 
+                                WHEN game_grade > 0 THEN ROUND((? + game_grade) / 2)
+                                ELSE ?
+                            END,
+                            completed_at = CURRENT_TIMESTAMP`,
+                        [userId, lessonContext.id, lessonContext.module || 'General', aiGrade, aiGrade,
+                            aiGrade, aiGrade, aiGrade]
+                    );
+
+                    // Update level progress
+                    await updateLevelProgress(db, userId, lessonContext.id);
+                } catch (gradeError) {
+                    console.error('Error saving AI grade:', gradeError);
+                }
+
+                // Clean the grade marker from content for display
+                content = content.replace(/\$\$LESSON_GRADE:\s*\d+\$\$/, '').trim();
+
+                // Add the grade to the response
+                score = aiGrade;
+            }
         }
 
         // 3. Save AI Response
@@ -505,7 +861,7 @@ app.post('/chat/message', authenticateToken, upload.single('audio'), async (req,
             [userId, lessonId, 'assistant', content, correction]
         );
 
-        res.json({ content, correction, score, examResult });
+        res.json({ content, correction, score, examResult, lessonGrade: score });
 
     } catch (error) {
         const fs = require('fs');
