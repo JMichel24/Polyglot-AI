@@ -370,6 +370,22 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
         }
     };
 
+    const handlePlayAudio = (text) => {
+        playAudio(
+            text,
+            language,
+            () => {
+                setIsAiSpeaking(true);
+                setIsAudioPaused(false);
+            },
+            () => {
+                setIsAiSpeaking(false);
+                setIsAudioPaused(false);
+            },
+            nativeLanguage
+        );
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-900 relative">
             {/* Header */}
@@ -501,7 +517,7 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
 
                                 {msg.role === 'assistant' && (
                                     <button
-                                        onClick={() => playAudio(msg.content, language, null, null, nativeLanguage)}
+                                        onClick={() => handlePlayAudio(msg.content)}
                                         className="mt-2 text-slate-500 hover:text-blue-400 transition-colors p-1"
                                     >
                                         <Volume2 size={16} />
