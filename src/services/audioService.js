@@ -1,6 +1,34 @@
 // Audio Service for Speech-to-Text (STT) and Text-to-Speech (TTS)
 
 let recognitionInstance = null;
+let isPaused = false;
+
+// Pause TTS playback
+export const pauseAudio = () => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.pause();
+        isPaused = true;
+    }
+};
+
+// Resume TTS playback
+export const resumeAudio = () => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+        isPaused = false;
+    }
+};
+
+// Stop TTS playback completely
+export const stopAudio = () => {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        isPaused = false;
+    }
+};
+
+// Check if TTS is paused
+export const isAudioPaused = () => isPaused;
 
 export const startListening = (language, onInterim) => {
     return new Promise((resolve, reject) => {
@@ -160,6 +188,9 @@ export const playAudio = (text, targetLanguage, onStart, onEnd, nativeLanguage =
                 .trim();
 
             const utterance = new SpeechSynthesisUtterance(spokenText);
+
+            // Set speech rate (1.0 = normal, 1.15 = slightly faster for fluency)
+            utterance.rate = 1.15;
 
             // Select Voice
             if (isTarget) {

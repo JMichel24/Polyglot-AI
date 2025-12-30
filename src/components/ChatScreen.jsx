@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle, Gamepad2 } from 'lucide-react';
+import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle, Gamepad2, Pause, Play, Square } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { sendMessageToGemini, getChatHistory } from '../services/geminiService';
-import { startListening, stopListening, playAudio } from '../services/audioService';
+import { startListening, stopListening, playAudio, pauseAudio, resumeAudio, stopAudio } from '../services/audioService';
 import SettingsModal from './SettingsModal';
 import KoreanKeyboard from './KoreanKeyboard';
 import JapaneseKeyboard from './JapaneseKeyboard';
@@ -29,6 +29,7 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
     // Audio Recording State
     const [isRecording, setIsRecording] = useState(false);
     const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+    const [isAudioPaused, setIsAudioPaused] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
 
@@ -404,6 +405,37 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
                             <Gamepad2 size={18} />
                             <span className="hidden md:inline">Practice</span>
                         </button>
+                    )}
+                    {/* AI Speaking Controls */}
+                    {isAiSpeaking && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => {
+                                    if (isAudioPaused) {
+                                        resumeAudio();
+                                        setIsAudioPaused(false);
+                                    } else {
+                                        pauseAudio();
+                                        setIsAudioPaused(true);
+                                    }
+                                }}
+                                className="p-2 bg-amber-600 hover:bg-amber-500 text-white rounded-full transition-colors"
+                                title={isAudioPaused ? "Resume" : "Pause"}
+                            >
+                                {isAudioPaused ? <Play size={18} /> : <Pause size={18} />}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    stopAudio();
+                                    setIsAiSpeaking(false);
+                                    setIsAudioPaused(false);
+                                }}
+                                className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-full transition-colors"
+                                title="Stop"
+                            >
+                                <Square size={18} />
+                            </button>
+                        </div>
                     )}
                     <button
                         onClick={() => setIsSettingsOpen(true)}
