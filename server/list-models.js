@@ -10,7 +10,7 @@ async function listModels() {
         // The SDK usually has a ModelManager or similar.
         // Let's try a simple generation with 'gemini-pro' to see if THAT works, as a baseline.
 
-        const models = ['gemini-1.5-flash', 'gemini-1.5-flash-001', 'gemini-1.5-flash-002', 'gemini-1.5-pro', 'gemini-pro'];
+        const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
         console.log("Testing models...");
 

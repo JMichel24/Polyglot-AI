@@ -60,7 +60,10 @@ export default function ClassesScreen({ language, level, onStartLesson }) {
             }
         };
 
-        fetchLessons();
+        // Only fetch lessons if token is available
+        if (token) {
+            fetchLessons();
+        }
     }, [language, level, token]);
 
     // Check if exam should be locked based on progress

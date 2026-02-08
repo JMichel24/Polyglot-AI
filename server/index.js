@@ -882,6 +882,7 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: err.message, stack: err.stack });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`For Android emulator, use: http://10.0.2.2:${PORT}`);
 });

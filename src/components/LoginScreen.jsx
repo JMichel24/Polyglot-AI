@@ -14,7 +14,13 @@ export default function LoginScreen({ onRegisterClick }) {
             const data = await loginService(username, password);
             login(data.token, data.username);
         } catch (err) {
-            setError('Invalid credentials');
+            // DEBUG: Show actual error and URL
+            import('../config').then(config => {
+                setError(`Error: ${err.message} (${config.API_BASE_URL})`);
+            }).catch(() => {
+                setError(`Error: ${err.message}`);
+            });
+            console.error(err);
         }
     };
 

@@ -22,7 +22,7 @@ async function testModel(modelName) {
 async function runTests() {
     console.log("API Key:", apiKey ? "Present" : "Missing");
 
-    const models = ["gemini-1.5-flash", "gemini-pro", "gemini-1.0-pro"];
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
     for (const model of models) {
         const success = await testModel(model);
