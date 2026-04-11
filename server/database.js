@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
+const path = require('path');
 
 let db;
 
@@ -7,7 +8,7 @@ async function initializeDatabase() {
     if (db) return db;
 
     db = await open({
-        filename: './database.sqlite',
+        filename: path.join(__dirname, 'database.sqlite'),
         driver: sqlite3.Database
     });
 

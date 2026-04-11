@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const morgan = require('morgan');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { initializeDatabase } = require('./database');
 const multer = require('multer');
@@ -18,7 +19,14 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 console.log("Loaded GEMINI_API_KEY:", GEMINI_API_KEY ? `${GEMINI_API_KEY.substring(0, 5)}...` : "Not Found");
 
 app.use(cors());
+app.use(morgan('dev'));
 app.use(express.json());
+
+// Log all requests
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
 
 // Middleware to authenticate token
 const authenticateToken = (req, res, next) => {
@@ -84,19 +92,26 @@ app.post('/auth/register', async (req, res) => {
 
 app.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
+    console.log(`[AUTH] Login attempt for user: ${username}`);
     const db = await initializeDatabase();
     const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
 
-    if (!user) return res.status(400).send('Cannot find user');
+    if (!user) {
+        console.warn(`[AUTH] User not found: ${username}`);
+        return res.status(400).send('Cannot find user');
+    }
 
     try {
         if (await bcrypt.compare(password, user.password)) {
             const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+            console.log(`[AUTH] Login successful for: ${username}`);
             res.json({ token, username: user.username });
         } else {
+            console.warn(`[AUTH] Invalid password for: ${username}`);
             res.status(403).send('Not Allowed');
         }
     } catch (error) {
+        console.error(`[AUTH] Error during login for ${username}:`, error);
         res.status(500).send();
     }
 });

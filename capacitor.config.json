@@ -1,6 +1,6 @@
 {
   "appId": "com.aitutorspeak.app",
-  "appName": "AI_TutorSpeak",
+  "appName": "Polyglot AI",
   "webDir": "dist",
   "server": {
     "cleartext": true,

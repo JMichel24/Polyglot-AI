@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Sidebar from './components/Sidebar';
 import ClassesScreen from './components/ClassesScreen';
+import SplashScreen from './components/SplashScreen';
 
 import { Menu, User, Settings } from 'lucide-react';
 
@@ -21,6 +22,7 @@ function AppContent() {
     const [nativeLanguage, setNativeLanguage] = useState('English');
     const [level, setLevel] = useState('A1');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [showSplash, setShowSplash] = useState(true);
 
     const [showRegister, setShowRegister] = useState(false);
     const [activeTab, setActiveTab] = useState('classes');
@@ -77,6 +79,10 @@ function AppContent() {
         setActiveLesson(lesson);
         // Switch to chat view implicitly by rendering ChatScreen with lesson context
     };
+
+    if (showSplash) {
+        return <SplashScreen onFinish={() => setShowSplash(false)} />;
+    }
 
     if (!isAuthenticated) {
         return (
