@@ -13,7 +13,7 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 console.log("=== CONTROL DE ENTORNO ===");
