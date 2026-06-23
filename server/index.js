@@ -882,7 +882,7 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             const modelName = "gemini-1.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                systemInstruction: systemInstruction
+                systemInstruction: (systemInstruction && systemInstruction.trim()) ? systemInstruction : undefined
             }, { apiVersion: 'v1' });
 
             let attempts = 0;
