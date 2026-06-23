@@ -16,7 +16,9 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-console.log("Loaded GEMINI_API_KEY:", GEMINI_API_KEY ? `${GEMINI_API_KEY.substring(0, 5)}...` : "Not Found");
+console.log("=== CONTROL DE ENTORNO ===");
+console.log("¿GEMINI_API_KEY cargada correctamente?:", process.env.GEMINI_API_KEY ? "SÍ" : "NO");
+console.log("==========================");
 
 app.use(cors());
 app.use(morgan('dev'));
@@ -91,30 +93,101 @@ app.post('/auth/register', async (req, res) => {
 });
 
 app.post('/auth/login', async (req, res) => {
+    console.log("=== INTENTO DE LOGIN ===", req.body);
     const { username, password } = req.body;
     console.log(`[AUTH] Login attempt for user: ${username}`);
-    const db = await initializeDatabase();
-    const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
-
-    if (!user) {
-        console.warn(`[AUTH] User not found: ${username}`);
-        return res.status(400).send('Cannot find user');
-    }
-
     try {
+        const db = await initializeDatabase();
+        const user = await db.get('SELECT * FROM users WHERE username = ?', [username]);
+
+        if (!user) {
+            console.warn(`[AUTH] User not found: ${username}`);
+            console.error("=== ERROR EN LOGIN ===", new Error(`User not found: ${username}`));
+            return res.status(400).send('Cannot find user');
+        }
+
         if (await bcrypt.compare(password, user.password)) {
-            const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+            const token = jwt.sign({ id: user.id, username: user.username, plan: user.plan || 'free' }, JWT_SECRET);
             console.log(`[AUTH] Login successful for: ${username}`);
-            res.json({ token, username: user.username });
+            res.json({ token, username: user.username, plan: user.plan || 'free' });
         } else {
             console.warn(`[AUTH] Invalid password for: ${username}`);
+            console.error("=== ERROR EN LOGIN ===", new Error('Invalid password'));
             res.status(403).send('Not Allowed');
         }
     } catch (error) {
-        console.error(`[AUTH] Error during login for ${username}:`, error);
-        res.status(500).send();
+        console.error("=== ERROR EN LOGIN ===", error);
+        res.status(500).send('Internal Server Error');
     }
 });
+
+app.get('/auth/me', authenticateToken, async (req, res) => {
+    console.log("=== VERIFICANDO TOKEN /AUTH/ME ===");
+    try {
+        const db = await initializeDatabase();
+        const user = await db.get('SELECT id, name, email, username, plan, created_at FROM users WHERE id = ?', [req.user.id]);
+        if (!user) {
+            console.error("=== ERROR EN /AUTH/ME ===", new Error('User not found'));
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error("=== ERROR EN /AUTH/ME ===", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/auth/upgrade', authenticateToken, async (req, res) => {
+    try {
+        const db = await initializeDatabase();
+        await db.run('UPDATE users SET plan = ? WHERE id = ?', ['premium', req.user.id]);
+        res.json({ success: true, plan: 'premium' });
+    } catch (error) {
+        console.error("Error in /auth/upgrade:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/auth/downgrade', authenticateToken, async (req, res) => {
+    try {
+        const db = await initializeDatabase();
+        await db.run('UPDATE users SET plan = ? WHERE id = ?', ['free', req.user.id]);
+        res.json({ success: true, plan: 'free' });
+    } catch (error) {
+        console.error("Error in /auth/downgrade:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+const checkPlanLimits = async (req, res, next) => {
+    try {
+        const db = await initializeDatabase();
+        const user = await db.get('SELECT plan FROM users WHERE id = ?', [req.user.id]);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (user.plan === 'free') {
+            const usage = await db.get(
+                `SELECT COUNT(*) as count FROM messages 
+                 WHERE user_id = ? AND role = 'user' 
+                 AND timestamp >= datetime('now', '-24 hours')`,
+                [req.user.id]
+            );
+
+            const count = usage ? usage.count : 0;
+            if (count >= 20) {
+                return res.status(402).json({ 
+                    error: 'AI daily limit reached. Upgrade to Premium for unlimited chats!' 
+                });
+            }
+        }
+        next();
+    } catch (error) {
+        console.error("Error in checkPlanLimits middleware:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
 
 // --- CHAT ROUTES ---
 
@@ -582,7 +655,7 @@ app.get('/chat/history', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/chat/message', authenticateToken, upload.single('audio'), async (req, res) => {
+app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('audio'), async (req, res) => {
     const { message, language, nativeLanguage, level, history: historyStr, lessonContext: lessonContextStr, inputMethod, username } = req.body;
     const userId = req.user.id;
     const audioFile = req.file;

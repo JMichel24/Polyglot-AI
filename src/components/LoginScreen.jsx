@@ -12,7 +12,7 @@ export default function LoginScreen({ onRegisterClick }) {
         e.preventDefault();
         try {
             const data = await loginService(username, password);
-            login(data.token, data.username);
+            login(data.token, data.username, data.plan);
         } catch (err) {
             // DEBUG: Show actual error and URL
             import('../config').then(config => {

@@ -9,8 +9,8 @@ const getApiUrl = () => {
         return 'http://10.0.2.2:3000';
     }
 
-    // Default to localhost for web/browser
-    return 'http://localhost:3000';
+    // Default to environment variable or localhost for web/browser
+    return import.meta.env.VITE_API_URL || 'http://localhost:3000';
 };
 
 export const API_BASE_URL = getApiUrl();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle, Gamepad2, Pause, Play, Square } from 'lucide-react';
+import { ArrowLeft, Mic, Send, Volume2, MicOff, Settings, Keyboard, StopCircle, Gamepad2, Pause, Play, Square, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from '../context/AuthContext';
 import { sendMessageToGemini, getChatHistory } from '../services/geminiService';
 import { startListening, stopListening, playAudio, pauseAudio, resumeAudio, stopAudio } from '../services/audioService';
 import SettingsModal from './SettingsModal';
@@ -12,11 +13,13 @@ import { getExercisesForLesson } from '../data/exercises';
 import { saveGameScore, saveLessonGrade } from '../services/gameService';
 
 export default function ChatScreen({ language, level, avatar, onBack, onUpdateSettings, lessonContext, nativeLanguage, username, chatMode = 'lesson' }) {
+    const { upgradePlan } = useAuth();
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [showPremiumLimitModal, setShowPremiumLimitModal] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [isHandsFree, setIsHandsFree] = useState(false);
     const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -204,12 +207,16 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
 
         } catch (error) {
             console.error("Error getting response:", error);
-            setMessages(prev => [...prev, {
-                id: uuidv4(),
-                role: 'system',
-                content: `Error: ${error.message}`,
-                correction: null
-            }]);
+            if (error.status === 402) {
+                setShowPremiumLimitModal(true);
+            } else {
+                setMessages(prev => [...prev, {
+                    id: uuidv4(),
+                    role: 'system',
+                    content: `Error: ${error.message}`,
+                    correction: null
+                }]);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -677,6 +684,61 @@ export default function ChatScreen({ language, level, avatar, onBack, onUpdateSe
                 currentApiKey={apiKey}
                 onSave={handleSettingsSave}
             />
+
+            {/* Premium Limit Modal */}
+            {showPremiumLimitModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-slate-800 w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-800/50">
+                            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                                <span className="text-yellow-500">👑</span> Límite Diario Alcanzado
+                            </h3>
+                            <button
+                                onClick={() => setShowPremiumLimitModal(false)}
+                                className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 text-center space-y-4">
+                            <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto text-amber-500">
+                                <span className="text-3xl">⭐</span>
+                            </div>
+                            <h4 className="text-lg font-bold text-white font-sans">¡Pásate a Premium!</h4>
+                            <p className="text-slate-350 text-sm leading-relaxed">
+                                Has alcanzado el límite de 20 mensajes diarios en el plan gratuito. 
+                                Obtén acceso ilimitado a conversaciones por chat, voz y todas las lecciones con el Plan Premium.
+                            </p>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-700 bg-slate-800/50 flex flex-col gap-2">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await upgradePlan();
+                                        setShowPremiumLimitModal(false);
+                                    } catch (err) {
+                                        alert("Error al actualizar plan: " + err.message);
+                                    }
+                                }}
+                                className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:from-purple-500 hover:to-pink-500 transition-colors shadow-lg shadow-purple-900/30"
+                            >
+                                Activar Plan Premium
+                            </button>
+                            <button
+                                onClick={() => setShowPremiumLimitModal(false)}
+                                className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium transition-colors"
+                            >
+                                Quizás más tarde
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

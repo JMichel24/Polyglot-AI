@@ -92,7 +92,8 @@ async function initializeDatabase() {
         'ALTER TABLE users ADD COLUMN name TEXT',
         'ALTER TABLE users ADD COLUMN email TEXT UNIQUE',
         'ALTER TABLE users ADD COLUMN email_consent INTEGER DEFAULT 0',
-        'ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP'
+        'ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+        "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'"
     ];
 
     for (const sql of migrations) {

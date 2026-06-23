@@ -3,7 +3,7 @@ import { BookOpen, MessageCircle, LogOut, User, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onProfileClick, onSettingsClick }) {
-    const { logout, user } = useAuth();
+    const { logout, user, upgradePlan } = useAuth();
 
     return (
         <>
@@ -56,18 +56,38 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose, onPro
 
                 <div className="p-4 border-t border-slate-800">
                     {/* User Info with Profile Button */}
-                    <button
-                        onClick={onProfileClick}
-                        className="w-full flex items-center gap-3 px-4 py-3 mb-2 hover:bg-slate-800 rounded-xl transition-colors group"
-                    >
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg">
-                            {user?.username?.charAt(0).toUpperCase() || 'U'}
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                            <p className="text-sm font-medium text-white truncate">{user?.username}</p>
-                            <p className="text-xs text-slate-500 truncate">View Profile</p>
-                        </div>
-                    </button>
+                    <div className="w-full flex items-center gap-3 px-4 py-3 mb-2 hover:bg-slate-850 bg-slate-800/30 rounded-xl border border-slate-800 transition-colors">
+                        <button
+                            onClick={onProfileClick}
+                            className="flex items-center gap-3 flex-1 min-w-0 text-left group"
+                        >
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shrink-0">
+                                {user?.username?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors">{user?.username}</p>
+                                <p className="text-xs text-slate-500 truncate">
+                                    {user?.plan === 'premium' ? '👑 Plan Premium' : 'Free Learner'}
+                                </p>
+                            </div>
+                        </button>
+                        {user?.plan === 'free' && (
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                        await upgradePlan();
+                                    } catch (err) {
+                                        alert("Error al actualizar plan: " + err.message);
+                                    }
+                                }}
+                                className="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-[11px] font-bold transition-all shadow-md shadow-purple-900/20 shrink-0"
+                                title="Pasar a Premium"
+                            >
+                                Upgrade
+                            </button>
+                        )}
+                    </div>
 
                     {/* Settings Button */}
                     <button

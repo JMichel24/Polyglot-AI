@@ -24,3 +24,42 @@ export const register = async ({ name, email, username, password, emailConsent }
     }
     return response.json();
 };
+
+export const getCurrentUser = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No authentication token found');
+
+    const response = await fetch(`${API_URL}/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) {
+        const err = new Error('Failed to fetch user profile');
+        err.status = response.status;
+        throw err;
+    }
+    return response.json();
+};
+
+export const upgradeUserPlan = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No authentication token found');
+
+    const response = await fetch(`${API_URL}/upgrade`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to upgrade plan');
+    return response.json();
+};
+
+export const downgradeUserPlan = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No authentication token found');
+
+    const response = await fetch(`${API_URL}/downgrade`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to downgrade plan');
+    return response.json();
+};

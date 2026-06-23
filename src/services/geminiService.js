@@ -45,7 +45,12 @@ export const sendMessageToGemini = async (text, language, level, history, lesson
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 402) {
+            const error = new Error(errorData.error || 'AI daily limit reached. Upgrade to Premium for unlimited chats!');
+            error.status = 402;
+            throw error;
+        }
         throw new Error(errorData.error || 'Failed to get response from AI');
     }
 

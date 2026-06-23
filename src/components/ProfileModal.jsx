@@ -1,9 +1,9 @@
 import React from 'react';
-import { X, User, Mail, Calendar, Globe, GraduationCap } from 'lucide-react';
+import { X, User, Mail, Calendar, Globe, GraduationCap, Crown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProfileModal({ isOpen, onClose, language, level, nativeLanguage }) {
-    const { user } = useAuth();
+    const { user, upgradePlan } = useAuth();
 
     if (!isOpen) return null;
 
@@ -76,6 +76,33 @@ export default function ProfileModal({ isOpen, onClose, language, level, nativeL
                             <p className="text-xs text-slate-400">Proficiency Level</p>
                             <p className="text-sm font-medium text-white">{level}</p>
                         </div>
+                    </div>
+
+                    {/* Subscription Plan */}
+                    <div className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-xl">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                            <Crown size={18} className="text-amber-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs text-slate-400">Subscription Plan</p>
+                            <p className="text-sm font-medium text-white truncate">
+                                {user?.plan === 'premium' ? 'Premium (Unlimited)' : 'Free Plan (20 messages/day)'}
+                            </p>
+                        </div>
+                        {user?.plan === 'free' && (
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await upgradePlan();
+                                    } catch (err) {
+                                        alert("Error al actualizar plan: " + err.message);
+                                    }
+                                }}
+                                className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-purple-900/20 shrink-0"
+                            >
+                                Upgrade
+                            </button>
+                        )}
                     </div>
                 </div>
 
