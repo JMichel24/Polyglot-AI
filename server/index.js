@@ -883,7 +883,7 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 systemInstruction: systemInstruction
-            });
+            }, { apiVersion: 'v1' });
 
             let attempts = 0;
             while (attempts <= maxRetries) {
