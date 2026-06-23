@@ -857,12 +857,6 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
         }
 
         // 2. Call Gemini
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            systemInstruction: systemInstruction
-        });
-
         const prompt = [
             `Conversation History:
             ${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
@@ -882,7 +876,43 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             });
         }
 
-        const result = await model.generateContent(prompt);
+        // Call Gemini with retries and stable model (gemini-1.5-flash)
+        const callGeminiWithRetry = async (prompt, systemInstruction, maxRetries = 2, delayMs = 2000) => {
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const modelName = "gemini-1.5-flash";
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                systemInstruction: systemInstruction
+            });
+
+            let attempts = 0;
+            while (attempts <= maxRetries) {
+                try {
+                    console.log(`[Gemini] Attempt ${attempts + 1}/${maxRetries + 1} using model ${modelName}...`);
+                    const result = await model.generateContent(prompt);
+                    return result;
+                } catch (error) {
+                    attempts++;
+                    const errorStr = error.toString() + " " + (error.message || "");
+                    const isTransient = error.status === 503 || 
+                                       error.status === 429 ||
+                                       errorStr.includes('503') || 
+                                       errorStr.includes('429') ||
+                                       errorStr.includes('Service Unavailable') || 
+                                       errorStr.includes('Resource has been exhausted') ||
+                                       errorStr.includes('overloaded');
+                    
+                    if (isTransient && attempts <= maxRetries) {
+                        console.warn(`[Gemini Warning] Transient error (${error.message || error.toString()}). Retrying in ${delayMs}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delayMs));
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+        };
+
+        const result = await callGeminiWithRetry(prompt, systemInstruction);
         const responseText = result.response.text();
 
         // Parse response
