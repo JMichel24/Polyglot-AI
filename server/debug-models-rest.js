@@ -3,7 +3,7 @@ const fs = require('fs');
 
 async function debugModels() {
     const key = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
 
     try {
         const response = await fetch(url);

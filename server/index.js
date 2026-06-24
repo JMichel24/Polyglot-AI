@@ -915,7 +915,7 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 systemInstruction: (systemInstruction && systemInstruction.trim()) ? systemInstruction : undefined
-            }, { apiVersion: 'v1beta' });
+            }, { apiVersion: 'v1' });
 
             let attempts = 0;
             while (attempts <= maxRetries) {
