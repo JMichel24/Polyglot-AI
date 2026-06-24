@@ -12,6 +12,10 @@ async function initializeDatabase() {
         driver: sqlite3.Database
     });
 
+    // Configure SQLite busy timeout and WAL mode for production concurrency
+    await db.run('PRAGMA busy_timeout = 30000;');
+    await db.run('PRAGMA journal_mode = WAL;');
+
     await db.exec(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,7 +24,10 @@ async function initializeDatabase() {
             username TEXT UNIQUE,
             password TEXT,
             email_consent INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            native_language TEXT,
+            target_language TEXT,
+            level TEXT
         );
 
         CREATE TABLE IF NOT EXISTS messages (
@@ -93,7 +100,10 @@ async function initializeDatabase() {
         'ALTER TABLE users ADD COLUMN email TEXT UNIQUE',
         'ALTER TABLE users ADD COLUMN email_consent INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
-        "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'"
+        "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'",
+        "ALTER TABLE users ADD COLUMN native_language TEXT",
+        "ALTER TABLE users ADD COLUMN target_language TEXT",
+        "ALTER TABLE users ADD COLUMN level TEXT"
     ];
 
     for (const sql of migrations) {

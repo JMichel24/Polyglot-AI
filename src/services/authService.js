@@ -63,3 +63,23 @@ export const downgradeUserPlan = async () => {
     if (!response.ok) throw new Error('Failed to downgrade plan');
     return response.json();
 };
+
+export const saveUserPreferences = async (prefs) => {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No authentication token found');
+
+    const response = await fetch(`${API_URL}/preferences`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+            nativeLanguage: prefs.nativeLanguage,
+            targetLanguage: prefs.language,
+            level: prefs.level
+        })
+    });
+    if (!response.ok) throw new Error('Failed to save preferences');
+    return response.json();
+};

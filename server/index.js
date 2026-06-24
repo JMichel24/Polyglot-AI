@@ -125,7 +125,7 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
     console.log("=== VERIFICANDO TOKEN /AUTH/ME ===");
     try {
         const db = await initializeDatabase();
-        const user = await db.get('SELECT id, name, email, username, plan, created_at FROM users WHERE id = ?', [req.user.id]);
+        const user = await db.get('SELECT id, name, email, username, plan, created_at, native_language, target_language, level FROM users WHERE id = ?', [req.user.id]);
         if (!user) {
             console.error("=== ERROR EN /AUTH/ME ===", new Error('User not found'));
             return res.status(404).json({ error: 'User not found' });
@@ -133,6 +133,38 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
         res.json(user);
     } catch (error) {
         console.error("=== ERROR EN /AUTH/ME ===", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update user preferences
+app.post('/auth/preferences', authenticateToken, async (req, res) => {
+    const { nativeLanguage, targetLanguage, level } = req.body;
+    try {
+        const db = await initializeDatabase();
+        await db.run(
+            `UPDATE users SET native_language = ?, target_language = ?, level = ? WHERE id = ?`,
+            [nativeLanguage, targetLanguage, level, req.user.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Error updating preferences:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Support /api/users/preferences route
+app.put('/api/users/preferences', authenticateToken, async (req, res) => {
+    const { nativeLanguage, targetLanguage, level } = req.body;
+    try {
+        const db = await initializeDatabase();
+        await db.run(
+            `UPDATE users SET native_language = ?, target_language = ?, level = ? WHERE id = ?`,
+            [nativeLanguage, targetLanguage, level, req.user.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Error updating preferences:", error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -883,7 +915,7 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 systemInstruction: (systemInstruction && systemInstruction.trim()) ? systemInstruction : undefined
-            }, { apiVersion: 'v1' });
+            }, { apiVersion: 'v1beta' });
 
             let attempts = 0;
             while (attempts <= maxRetries) {

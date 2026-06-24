@@ -7,6 +7,7 @@ import RegisterScreen from './components/RegisterScreen';
 import ProfileModal from './components/ProfileModal';
 import SettingsModal from './components/SettingsModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { saveUserPreferences } from './services/authService';
 
 import Sidebar from './components/Sidebar';
 import ClassesScreen from './components/ClassesScreen';
@@ -33,19 +34,28 @@ function AppContent() {
     // Load preferences when user changes
     React.useEffect(() => {
         if (user && user.username) {
-            const key = `prefs_${user.username}`;
-            const savedPrefs = localStorage.getItem(key);
-            if (savedPrefs) {
-                const prefs = JSON.parse(savedPrefs);
-                setLanguage(prefs.language || 'English');
-                setLevel(prefs.level || 'Basic');
-                setNativeLanguage(prefs.nativeLanguage || 'English');
+            // Check if backend already has preferences stored
+            if (user.target_language && user.level) {
+                setLanguage(user.target_language);
+                setLevel(user.level);
+                if (user.native_language) setNativeLanguage(user.native_language);
                 setHasStarted(true);
             } else {
-                // New user or no prefs saved
-                setHasStarted(false);
-                setLanguage('English');
-                setLevel('Basic');
+                // Fallback to localStorage
+                const key = `prefs_${user.username}`;
+                const savedPrefs = localStorage.getItem(key);
+                if (savedPrefs) {
+                    const prefs = JSON.parse(savedPrefs);
+                    setLanguage(prefs.language || 'English');
+                    setLevel(prefs.level || 'Basic');
+                    setNativeLanguage(prefs.nativeLanguage || 'English');
+                    setHasStarted(true);
+                } else {
+                    // New user or no prefs saved
+                    setHasStarted(false);
+                    setLanguage('English');
+                    setLevel('Basic');
+                }
             }
         }
     }, [user]);
@@ -62,6 +72,11 @@ function AppContent() {
                 nativeLanguage: selectedNativeLanguage || nativeLanguage
             };
             localStorage.setItem(`prefs_${user.username}`, JSON.stringify(prefs));
+
+            // Save preferences to backend SQLite
+            saveUserPreferences(prefs).catch(err => {
+                console.error("Failed to persist onboarding preferences:", err);
+            });
         }
 
         setHasStarted(true);
@@ -192,6 +207,9 @@ function AppContent() {
                                         nativeLanguage: nativeLanguage
                                     };
                                     localStorage.setItem(`prefs_${user.username}`, JSON.stringify(prefs));
+                                    saveUserPreferences(prefs).catch(err => {
+                                        console.error("Failed to persist settings:", err);
+                                    });
                                 }
                             }}
                         />
@@ -218,6 +236,9 @@ function AppContent() {
                                         nativeLanguage: nativeLanguage
                                     };
                                     localStorage.setItem(`prefs_${user.username}`, JSON.stringify(prefs));
+                                    saveUserPreferences(prefs).catch(err => {
+                                        console.error("Failed to persist settings:", err);
+                                    });
                                 }
                             }}
                         />
@@ -250,6 +271,9 @@ function AppContent() {
                             nativeLanguage: nativeLanguage
                         };
                         localStorage.setItem(`prefs_${user.username}`, JSON.stringify(prefs));
+                        saveUserPreferences(prefs).catch(err => {
+                            console.error("Failed to persist settings:", err);
+                        });
                     }
                 }}
             />
