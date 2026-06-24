@@ -908,72 +908,27 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             });
         }
 
-        // Call Gemini with retries and stable model (gemini-1.5-flash) using direct REST API v1
+        // Call Gemini with retries and stable model (gemini-1.5-flash) using official SDK v1
         const callGeminiWithRetry = async (prompt, systemInstruction, maxRetries = 2, delayMs = 2000) => {
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
             const modelName = "gemini-1.5-flash";
-            const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-            
-            // Format prompt/contents
-            const parts = [];
-            for (const part of prompt) {
-                if (typeof part === 'string') {
-                    parts.push({ text: part });
-                } else if (part && part.inlineData) {
-                    parts.push({ inlineData: part.inlineData });
-                } else {
-                    parts.push(part);
-                }
-            }
-            
-            const payload = {
-                contents: [{
-                    role: 'user',
-                    parts: parts
-                }]
-            };
-
-            if (systemInstruction && systemInstruction.trim()) {
-                payload.system_instruction = {
-                    parts: [{ text: systemInstruction }]
-                };
-            }
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                systemInstruction: (systemInstruction && systemInstruction.trim()) ? systemInstruction : undefined
+            });
 
             let attempts = 0;
             while (attempts <= maxRetries) {
                 try {
-                    console.log(`[Gemini] Attempt ${attempts + 1}/${maxRetries + 1} using model ${modelName} via REST (v1)...`);
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const errData = await response.json().catch(() => ({}));
-                        const errorMsg = errData.error?.message || response.statusText;
-                        const errorStatus = response.status;
-                        throw new Error(`REST Error (${errorStatus}): ${errorMsg}`);
-                    }
-
-                    const data = await response.json();
-                    
-                    return {
-                        response: {
-                            text: () => {
-                                const textVal = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                                if (textVal === undefined) {
-                                    throw new Error("No text candidate returned from Gemini response");
-                                }
-                                return textVal;
-                            }
-                        }
-                    };
+                    console.log(`[Gemini] Attempt ${attempts + 1}/${maxRetries + 1} using model ${modelName} via SDK...`);
+                    const result = await model.generateContent(prompt);
+                    return result;
                 } catch (error) {
                     attempts++;
                     const errorStr = error.toString() + " " + (error.message || "");
-                    const isTransient = errorStr.includes('503') || 
+                    const isTransient = error.status === 503 || 
+                                       error.status === 429 ||
+                                       errorStr.includes('503') || 
                                        errorStr.includes('429') ||
                                        errorStr.includes('Service Unavailable') || 
                                        errorStr.includes('Resource has been exhausted') ||
