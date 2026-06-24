@@ -6,6 +6,22 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const morgan = require('morgan');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Compatibility wrapper to support options object in GoogleGenAI constructor for SDK v1
+class GoogleGenAI extends GoogleGenerativeAI {
+    constructor(opts) {
+        const apiKey = (opts && typeof opts === 'object') ? opts.apiKey : opts;
+        super(apiKey);
+        this.apiVersion = (opts && typeof opts === 'object') ? opts.apiVersion : undefined;
+    }
+
+    getGenerativeModel(modelParams, requestOptions = {}) {
+        if (this.apiVersion && !requestOptions.apiVersion) {
+            requestOptions.apiVersion = this.apiVersion;
+        }
+        return super.getGenerativeModel(modelParams, requestOptions);
+    }
+}
 const { initializeDatabase } = require('./database');
 const multer = require('multer');
 
@@ -910,7 +926,10 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
 
         // Call Gemini with retries and stable model (gemini-1.5-flash) using official SDK v1
         const callGeminiWithRetry = async (prompt, systemInstruction, maxRetries = 2, delayMs = 2000) => {
-            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const genAI = new GoogleGenAI({
+                apiKey: GEMINI_API_KEY,
+                apiVersion: "v1"
+            });
             const modelName = "gemini-1.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
