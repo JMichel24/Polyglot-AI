@@ -7,6 +7,34 @@ const jwt = require('jsonwebtoken');
 const morgan = require('morgan');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+let currentSystemInstruction = null;
+
+// Monkeypatch global fetch to format system_instruction to v1 REST schema
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async function (url, options) {
+    const urlStr = url ? url.toString() : "";
+    if (urlStr.includes('generativelanguage.googleapis.com/v1/') && options && options.body) {
+        try {
+            const body = JSON.parse(options.body);
+            
+            // Ensure any camelCase systemInstruction is completely removed to prevent violations
+            delete body.systemInstruction;
+
+            // Explicitly force system_instruction if context is available
+            if (currentSystemInstruction) {
+                body.system_instruction = {
+                    parts: [{ text: currentSystemInstruction }]
+                };
+            }
+
+            options.body = JSON.stringify(body);
+        } catch (e) {
+            // Ignore
+        }
+    }
+    return originalFetch.apply(this, arguments);
+};
+
 // Compatibility wrapper to support options object in GoogleGenAI constructor for SDK v1
 class GoogleGenAI extends GoogleGenerativeAI {
     constructor(opts) {
@@ -19,7 +47,13 @@ class GoogleGenAI extends GoogleGenerativeAI {
         if (this.apiVersion && !requestOptions.apiVersion) {
             requestOptions.apiVersion = this.apiVersion;
         }
-        return super.getGenerativeModel(modelParams, requestOptions);
+        
+        // Pass systemInstruction as undefined to the base SDK to avoid camelCase in final payload
+        const baseParams = { ...modelParams };
+        delete baseParams.system_instruction;
+        baseParams.systemInstruction = undefined;
+
+        return super.getGenerativeModel(baseParams, requestOptions);
     }
 }
 const { initializeDatabase } = require('./database');
@@ -926,6 +960,8 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
 
         // Call Gemini with retries and stable model (gemini-1.5-flash) using official SDK v1
         const callGeminiWithRetry = async (prompt, systemInstruction, maxRetries = 2, delayMs = 2000) => {
+            currentSystemInstruction = (systemInstruction && systemInstruction.trim()) ? systemInstruction : null;
+
             const genAI = new GoogleGenAI({
                 apiKey: GEMINI_API_KEY,
                 apiVersion: "v1"
@@ -933,7 +969,9 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             const modelName = "gemini-1.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                systemInstruction: (systemInstruction && systemInstruction.trim()) ? systemInstruction : undefined
+                system_instruction: {
+                    parts: [{ text: (systemInstruction && systemInstruction.trim()) ? systemInstruction : "" }]
+                }
             });
 
             let attempts = 0;
