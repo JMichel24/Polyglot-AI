@@ -47,6 +47,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         localStorage.removeItem('plan');
+        localStorage.removeItem('activeTab');
+        localStorage.removeItem('activeLesson');
     };
 
     const upgradePlan = async () => {

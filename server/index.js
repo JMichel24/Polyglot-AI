@@ -675,7 +675,7 @@ app.get('/chat/history', authenticateToken, async (req, res) => {
             query += ' AND lesson_id = ?';
             params.push(lessonId);
         } else {
-            query += ' AND lesson_id IS NULL';
+            query += ' AND (lesson_id IS NULL OR lesson_id = \'practice-free\')';
         }
 
         query += ' ORDER BY timestamp ASC';
@@ -709,12 +709,12 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
 
     try {
         const db = await initializeDatabase();
-        const lessonId = lessonContext ? lessonContext.id : null;
+        const lessonId = lessonContext ? lessonContext.id : 'practice-free';
 
         // 1. Save User Message
         await db.run(
             'INSERT INTO messages (user_id, lesson_id, role, content) VALUES (?, ?, ?, ?)',
-            [userId, lessonId, 'user', message]
+            [userId, lessonId, 'user', message || (audioFile ? '🎤 [Voice Message]' : '')]
         );
 
         // --- BUILD SYSTEM INSTRUCTION ---

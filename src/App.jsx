@@ -16,7 +16,7 @@ import SplashScreen from './components/SplashScreen';
 import { Menu, User, Settings } from 'lucide-react';
 
 function AppContent() {
-    const { isAuthenticated, user } = useAuth();
+    const { isAuthenticated, user, loading } = useAuth();
 
     const [hasStarted, setHasStarted] = useState(false);
     const [language, setLanguage] = useState('English');
@@ -26,8 +26,17 @@ function AppContent() {
     const [showSplash, setShowSplash] = useState(true);
 
     const [showRegister, setShowRegister] = useState(false);
-    const [activeTab, setActiveTab] = useState('classes');
-    const [activeLesson, setActiveLesson] = useState(null);
+    const [activeTab, setActiveTab] = useState(() => {
+        return localStorage.getItem('activeTab') || 'classes';
+    });
+    const [activeLesson, setActiveLesson] = useState(() => {
+        const saved = localStorage.getItem('activeLesson');
+        try {
+            return saved ? JSON.parse(saved) : null;
+        } catch (e) {
+            return null;
+        }
+    });
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -85,6 +94,7 @@ function AppContent() {
     const handleBack = () => {
         if (activeLesson) {
             setActiveLesson(null);
+            localStorage.removeItem('activeLesson');
         } else {
             setHasStarted(false);
         }
@@ -92,8 +102,19 @@ function AppContent() {
 
     const handleStartLesson = (lesson) => {
         setActiveLesson(lesson);
-        // Switch to chat view implicitly by rendering ChatScreen with lesson context
+        localStorage.setItem('activeLesson', JSON.stringify(lesson));
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                    <p className="text-slate-400 font-medium">Cargando perfil de usuario...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (showSplash) {
         return <SplashScreen onFinish={() => setShowSplash(false)} />;
@@ -162,7 +183,9 @@ function AppContent() {
                 activeTab={activeTab}
                 onTabChange={(tab) => {
                     setActiveTab(tab);
+                    localStorage.setItem('activeTab', tab);
                     setActiveLesson(null); // Reset lesson when switching tabs
+                    localStorage.removeItem('activeLesson');
                     setIsMobileMenuOpen(false); // Close menu on selection
                 }}
                 isOpen={isMobileMenuOpen}
