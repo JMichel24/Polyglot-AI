@@ -889,25 +889,43 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
         }
 
         // 2. Call Gemini
-        const systemPrompt = (systemInstruction && systemInstruction.trim())
-            ? `System Instruction / Teacher Personality:
-            ${systemInstruction}
+        const contents = [];
 
-            `
-            : "";
+        // Helper to push message and ensure alternating roles
+        const addMessage = (role, parts) => {
+            const lastMessage = contents[contents.length - 1];
+            if (lastMessage && lastMessage.role === role) {
+                lastMessage.parts.push(...parts);
+            } else {
+                contents.push({ role, parts });
+            }
+        };
 
-        const prompt = [
-            systemPrompt + `Conversation History:
-            ${history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
-            user: ${message || (audioFile ? "[AUDIO MESSAGE]" : "")}`
-        ];
+        // Inject system instruction as first user message
+        if (systemInstruction && systemInstruction.trim()) {
+            addMessage('user', [{ text: `System Instruction / Teacher Personality: ${systemInstruction}` }]);
+            addMessage('model', [{ text: "Understood. I will act as the specified language teacher/examiner." }]);
+        }
+
+        // Add history mapping 'assistant' role to 'model'
+        if (history && history.length > 0) {
+            history.forEach(msg => {
+                const apiRole = msg.role === 'assistant' ? 'model' : 'user';
+                addMessage(apiRole, [{ text: msg.content }]);
+            });
+        }
+
+        // Add current message and optional audio data
+        const currentParts = [];
+        if (message) {
+            currentParts.push({ text: message });
+        } else if (audioFile) {
+            currentParts.push({ text: "[AUDIO MESSAGE]" });
+        }
 
         if (audioFile) {
-            // Sanitize mimeType (remove codecs, etc.)
             const mimeType = audioFile.mimetype.split(';')[0];
-            console.log(`[Audio] Received: ${audioFile.size} bytes, Type: ${audioFile.mimetype} -> Sending as: ${mimeType}`);
-
-            prompt.push({
+            currentParts.push({
                 inlineData: {
                     data: audioFile.buffer.toString('base64'),
                     mimeType: mimeType
@@ -915,17 +933,21 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             });
         }
 
-        // Call Gemini with retries and stable model (gemini-1.5-flash) using official SDK v1
-        const callGeminiWithRetry = async (prompt, maxRetries = 2, delayMs = 2000) => {
+        if (currentParts.length > 0) {
+            addMessage('user', currentParts);
+        }
+
+        // Call Gemini with retries and stable model (gemini-2.5-flash) using official SDK v1 stable version
+        const callGeminiWithRetry = async (contentsArray, maxRetries = 2, delayMs = 2000) => {
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-            const modelName = "gemini-1.5-flash";
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const modelName = "gemini-2.5-flash";
+            const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: "v1" });
 
             let attempts = 0;
             while (attempts <= maxRetries) {
                 try {
-                    console.log(`[Gemini] Attempt ${attempts + 1}/${maxRetries + 1} using model ${modelName} via SDK...`);
-                    const result = await model.generateContent(prompt);
+                    console.log(`[Gemini] Attempt ${attempts + 1}/${maxRetries + 1} using model ${modelName} via SDK v1...`);
+                    const result = await model.generateContent({ contents: contentsArray });
                     return result;
                 } catch (error) {
                     attempts++;
@@ -948,7 +970,7 @@ app.post('/chat/message', authenticateToken, checkPlanLimits, upload.single('aud
             }
         };
 
-        const result = await callGeminiWithRetry(prompt);
+        const result = await callGeminiWithRetry(contents);
         const responseText = result.response.text();
 
         // Parse response

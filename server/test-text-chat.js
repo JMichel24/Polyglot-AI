@@ -6,7 +6,7 @@ async function testTextChat() {
         const loginRes = await fetch('http://localhost:3000/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'newuser123', password: 'password' })
+            body: JSON.stringify({ username: 'testagent', password: 'password123' })
         });
 
         if (!loginRes.ok) throw new Error('Login failed');
